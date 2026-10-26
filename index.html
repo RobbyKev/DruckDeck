@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d0b0c" />
+    <meta name="robots" content="noindex" />
+    <title>DruckDeck</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1 class="logo">DruckDeck</h1>
+      <p class="tagline">Commander-Decks als deutsche Proxys auf A4</p>
+    </header>
+
+    <main>
+      <section class="panel" id="input-panel">
+        <h2><span class="step">I</span> Deck wählen</h2>
+        <div class="tabs" role="tablist">
+          <button role="tab" class="tab active" data-tab="precon" aria-selected="true">Precon</button>
+          <button role="tab" class="tab" data-tab="list" aria-selected="false">Liste einfügen</button>
+        </div>
+
+        <div class="tab-body" data-body="precon">
+          <label class="field">
+            <span>Commander-Precon suchen</span>
+            <div class="combo">
+              <input id="precon-search" type="search" autocomplete="off" spellcheck="false"
+                     placeholder="z. B. Endless Punishment, Duskmourn, DSC …" />
+              <ul id="precon-suggestions" class="suggestions" role="listbox" hidden></ul>
+            </div>
+          </label>
+          <p class="hint" id="precon-status">Lade Precon-Liste …</p>
+        </div>
+
+        <div class="tab-body" data-body="list" hidden>
+          <label class="field">
+            <span>Deckname</span>
+            <input id="list-name" type="text" placeholder="Mein Deck" />
+          </label>
+          <label class="field">
+            <span>Deckliste (Moxfield / Archidekt)</span>
+            <textarea id="list-text" rows="10" spellcheck="false"
+                      placeholder="Commander&#10;1 Auntie Ool, Cursewretch (ECC) 2&#10;&#10;Deck&#10;1 Sol Ring (C21) 263&#10;1 Arcane Signet&#10;12 Forest"></textarea>
+          </label>
+          <p class="hint">Überschriften wie „Commander“ markieren den Kommandanten. Den Kommandanten kannst du danach auch per Klick auf eine Karte festlegen.</p>
+          <button class="btn primary" id="list-load">Liste laden</button>
+        </div>
+      </section>
+
+      <section class="panel" id="progress-panel" hidden>
+        <div class="progress-label" id="progress-label">…</div>
+        <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+      </section>
+
+      <section class="panel" id="review-panel" hidden>
+        <div class="review-head">
+          <div>
+            <h2><span class="step">II</span> <span id="deck-title">Deck</span></h2>
+            <p class="summary" id="summary"></p>
+          </div>
+          <div class="actions">
+            <label class="check"><input type="checkbox" id="opt-lands" checked /> Standardländer mitdrucken</label>
+            <label class="check"><input type="checkbox" id="opt-backs" checked /> Rückseiten doppelseitiger Karten mitdrucken</label>
+            <button class="btn primary" id="pdf-btn">PDF erstellen</button>
+          </div>
+        </div>
+        <div class="grid" id="card-grid"></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      Nur für private Runden, nicht zum Verkauf. · Kartendaten und -bilder: Scryfall, Decklisten: MTGJSON. ·
+      Inoffiziell, nicht mit Wizards of the Coast verbunden. ·
+      <button class="link" id="clear-cache">Cache leeren</button>
+    </footer>
+
+    <dialog id="card-dialog">
+      <form method="dialog" class="dialog-close"><button aria-label="Schließen">×</button></form>
+      <div id="dialog-body"></div>
+    </dialog>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
