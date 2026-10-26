@@ -5,7 +5,7 @@ import './style.css';
 
 import { loadPreconList, loadPrecon } from './lib/mtgjson.js';
 import { parseDecklist } from './lib/parse.js';
-import { getJSON, TTL } from './lib/net.js';
+import { getJSON, TTL, onThrottle } from './lib/net.js';
 import { clearCache } from './lib/cache.js';
 import {
   resolveEntry, verifyGerman, germanPrints, statusFor, oracleId,
@@ -29,7 +29,7 @@ const BADGE = {
     e.res.explicitPrint ? 'deutsch, Original-Druck' : `deutsch (${e.res.chosen.set.toUpperCase()})`,
   [STATUS.other]: (e) => `deutsch, anderer Druck (${e.res.chosen.set.toUpperCase()})`,
   [STATUS.english]: () => 'nur Englisch verfügbar',
-  [STATUS.missing]: () => 'nicht gefunden',
+  [STATUS.missing]: (e) => (e.res?.failed ? 'Laden fehlgeschlagen' : 'nicht gefunden'),
 };
 
 // ---------- Abgeleitete Kartendaten ----------
@@ -175,25 +175,32 @@ function setProgress(done, total, label) {
   $('#progress-bar').style.width = `${total ? (100 * done) / total : 0}%`;
 }
 
-async function loadDeck(name, rawEntries) {
-  const runId = ++state.runId;
-  state.deckName = name;
-  state.entries = rawEntries.map((e, i) => ({ ...e, id: i, res: null, nameOverride: '' }));
-  state.entries.forEach(refresh);
-  $('#review-panel').hidden = true;
+// Hinweis im Fortschrittsbalken, solange Scryfall uns pausieren lässt
+let throttleTimer = null;
+onThrottle((until) => {
+  clearInterval(throttleTimer);
+  const tick = () => {
+    const secs = Math.ceil((until - Date.now()) / 1000);
+    if (secs <= 0 || $('#progress-panel').hidden) return clearInterval(throttleTimer);
+    $('#progress-label').textContent = `Scryfall bremst gerade – kurze Pause, weiter in ${secs} s …`;
+  };
+  tick();
+  throttleTimer = setInterval(tick, 1000);
+});
 
-  const total = state.entries.reduce((n, e) => n + e.count, 0);
+async function resolveAll(entries, runId) {
+  const total = entries.reduce((n, e) => n + e.count, 0);
   let done = 0;
   setProgress(0, total, `Karte 0 von ${total} …`);
 
-  const queue = [...state.entries];
+  const queue = [...entries];
   const worker = async () => {
     while (queue.length) {
       const e = queue.shift();
       try {
         e.res = await resolveEntry(e);
       } catch (err) {
-        e.res = { status: STATUS.missing, chosen: null, base: null, note: err.message };
+        e.res = { status: STATUS.missing, chosen: null, base: null, failed: true, note: `${err.message} – bitte erneut versuchen` };
       }
       if (runId !== state.runId) return;
       refresh(e);
@@ -202,13 +209,37 @@ async function loadDeck(name, rawEntries) {
     }
   };
   await Promise.all(Array.from({ length: 4 }, worker));
-  if (runId !== state.runId) return;
-
+  if (runId !== state.runId) return false;
+  clearInterval(throttleTimer);
   $('#progress-panel').hidden = true;
+  return true;
+}
+
+async function loadDeck(name, rawEntries) {
+  const runId = ++state.runId;
+  state.deckName = name;
+  state.entries = rawEntries.map((e, i) => ({ ...e, id: i, res: null, nameOverride: '' }));
+  state.entries.forEach(refresh);
+  $('#review-panel').hidden = true;
+
+  if (!(await resolveAll(state.entries, runId))) return;
   render();
   $('#review-panel').hidden = false;
   $('#review-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+
+// Karten, deren Laden wegen Netzwerkproblemen fehlgeschlagen ist, erneut auflösen
+async function retryFailed() {
+  const failed = state.entries.filter((e) => e.res?.failed);
+  if (!failed.length) return;
+  $('#retry-btn').disabled = true;
+  try {
+    if (await resolveAll(failed, state.runId)) render();
+  } finally {
+    $('#retry-btn').disabled = false;
+  }
+}
+$('#retry-btn').addEventListener('click', retryFailed);
 
 // ---------- Vorschau ----------
 
@@ -225,7 +256,9 @@ function summaryHtml() {
     `${c.other} anderer Druck`,
     `<span class="${c.english ? 'bad' : ''}">${c.english} Englisch</span>`,
   ];
-  if (c.missing) parts.push(`<span class="bad">${c.missing} nicht gefunden</span>`);
+  const failed = state.entries.filter((e) => e.res?.failed).reduce((n, e) => n + e.count, 0);
+  if (failed) parts.push(`<span class="bad">${failed} Laden fehlgeschlagen</span>`);
+  if (c.missing - failed) parts.push(`<span class="bad">${c.missing - failed} nicht gefunden</span>`);
   if (c.names) parts.push(`<span class="warn">${c.names} ${c.names === 1 ? 'Name fehlt' : 'Namen fehlen'}</span>`);
   return parts.join(' · ');
 }
@@ -251,6 +284,9 @@ function cardHtml(e) {
 
 function render() {
   $('#deck-title').textContent = state.deckName;
+  const failed = state.entries.filter((e) => e.res?.failed).length;
+  $('#retry-btn').hidden = !failed;
+  $('#retry-btn').textContent = `${failed} fehlgeschlagene erneut laden`;
   $('#summary').innerHTML = summaryHtml();
   $('#card-grid').innerHTML = sortedEntries().map(cardHtml).join('');
 }
