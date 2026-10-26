@@ -393,3 +393,15 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(2px); 
   .precon-detail { grid-template-columns: 1fr; }
   .precon-cards img { width: min(200px, 45vw); }
 }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button {
+  font: 600 13px var(--font-body); color: var(--muted); background: #0f0d0e;
+  border: 0; border-right: 1px solid var(--line); padding: 7px 12px; cursor: pointer;
+}
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed='true'] { background: var(--red); color: #fff3e6; }
+.land-bar select {
+  font: inherit; font-size: 14px; color: var(--text);
+  background: #0f0d0e; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px;
+}
+.land-bar select:disabled { opacity: 0.4; }

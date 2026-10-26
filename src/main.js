@@ -27,12 +27,14 @@ const state = {
   runId: 0,
 };
 
+const LANG_ADJ = { de: 'deutsche', en: 'englische', ja: 'japanische' };
+
 const BADGE = {
   [STATUS.original]: (e) =>
     e.res.explicitPrint ? 'deutsch, Original-Druck' : `deutsch (${e.res.chosen.set.toUpperCase()})`,
   [STATUS.other]: (e) =>
     e.res.picked
-      ? `deutsch, selbst gewählt (${e.res.chosen.set.toUpperCase()})`
+      ? `selbst gewählt (${e.res.chosen.set.toUpperCase()}${e.res.chosen.lang !== 'de' ? ` · ${e.res.chosen.lang.toUpperCase()}` : ''})`
       : `deutsch, anderer Druck (${e.res.chosen.set.toUpperCase()})`,
   [STATUS.english]: () => 'nur Englisch verfügbar',
   [STATUS.missing]: (e) => (e.res?.failed ? 'Laden fehlgeschlagen' : 'nicht gefunden'),
@@ -51,7 +53,7 @@ function refresh(e) {
   const partial = faceNames.some(Boolean)
     ? card.card_faces.map((f, i) => faceNames[i] || f.name).join(' // ')
     : null;
-  e.displayName = e.nameOverride || de || (card?.lang === 'de' && partial) || card?.name || e.name;
+  e.displayName = e.nameOverride || e.res?.landName || de || (card?.lang === 'de' && partial) || card?.name || e.name;
 }
 
 function sortedEntries() {
@@ -449,22 +451,47 @@ function openLandPicker(e) {
     deName: group.find((g) => !g.nameOverride)?.displayName || e.displayName,
     total: group.reduce((n, g) => n + g.count, 0),
     picks,
-    fullArt: true,
+    view: 'deck', // 'deck' = Drucke aus dem Deck, 'all' = alle, 'fullart' = nur Full-Art
+    lang: 'de', // 'de', 'en', 'ja' oder 'any'
     cards: null,
     next: null,
     found: 0,
   };
   dialog.dataset.entry = '';
-  renderLandPicker();
+  showLandView();
   dialog.showModal();
-  loadLandPrints();
+}
+
+// Drucke, die automatisch im Deck sind (vor dem eigenen Auswählen)
+function deckLandPrints(P) {
+  const auto = state.landAuto[P.name] || landGroup(P.name).filter((g) => !g.res.picked);
+  return [...new Map(auto.map((a) => [a.res.chosen.id, a.res.chosen])).values()];
+}
+
+function showLandView() {
+  const P = landPicker;
+  P.error = null;
+  if (P.view === 'deck') {
+    P.cards = deckLandPrints(P);
+    P.next = null;
+    P.found = P.cards.length;
+    renderLandPicker();
+  } else {
+    P.cards = null;
+    renderLandPicker();
+    loadLandPrints();
+  }
 }
 
 async function loadLandPrints(more = false) {
   const P = landPicker;
   if (!P) return;
   try {
-    const page = await basicLandPrints(P.name, { fullArt: P.fullArt, pageUrl: more ? P.next : null });
+    const page = await basicLandPrints(P.name, {
+      fullArt: P.view === 'fullart',
+      lang: P.lang,
+      pageUrl: more ? P.next : null,
+    });
     if (P !== landPicker) return;
     P.cards = more ? [...(P.cards || []), ...page.cards] : page.cards;
     P.next = page.next;
@@ -487,21 +514,34 @@ function renderLandPicker() {
   const P = landPicker;
   if (!P) return;
   const cards = P.cards;
+  const views = [['deck', 'Im Deck'], ['all', 'Alle'], ['fullart', 'Full-Art']];
+  const langs = [['de', 'Deutsch'], ['en', 'Englisch'], ['ja', 'Japanisch'], ['any', 'Alle Sprachen']];
+  const what =
+    P.view === 'deck'
+      ? 'Drucke im Deck'
+      : P.lang === 'any'
+        ? 'Drucke in allen Sprachen'
+        : `${LANG_ADJ[P.lang]} Drucke`;
   $('#dialog-body').innerHTML = `
     <h3 class="land-title">${esc(P.deName)} – ${P.total}× im Deck</h3>
     <p class="hint">Klick auf ein Bild fügt einen Druck hinzu, „−“ nimmt ihn wieder weg. Plätze, die du nicht vergibst, bleiben automatisch.</p>
     <div class="land-bar">
-      <label class="check"><input type="checkbox" data-land-fullart ${P.fullArt ? 'checked' : ''} /> Nur Full-Art</label>
+      <span class="seg" role="group" aria-label="Ansicht">
+        ${views.map(([v, label]) => `<button type="button" data-land-view="${v}" aria-pressed="${P.view === v}">${label}</button>`).join('')}
+      </span>
+      <select data-land-lang aria-label="Sprache" ${P.view === 'deck' ? 'disabled' : ''}>
+        ${langs.map(([v, label]) => `<option value="${v}" ${P.lang === v ? 'selected' : ''}>${label}</option>`).join('')}
+      </select>
       <span class="land-count" data-land-count>${landHeadHtml(P)}</span>
       <span class="land-actions">
         <button class="btn small" data-land-reset>Automatisch</button>
         <button class="btn small primary" data-land-apply>Übernehmen</button>
       </span>
     </div>
-    ${cards ? '' : '<p class="hint">Suche deutsche Drucke …</p>'}
+    ${cards ? '' : '<p class="hint">Suche Drucke …</p>'}
     ${P.error ? `<p class="note">${esc(P.error)}</p>` : ''}
-    ${cards && !cards.length ? '<p class="hint">Keine passenden deutschen Drucke gefunden.</p>' : ''}
-    ${cards?.length ? `<p class="hint">${P.found} deutsche Drucke gefunden${P.found > cards.length ? `, ${cards.length} angezeigt` : ''}.</p>` : ''}
+    ${cards && !cards.length ? '<p class="hint">Keine passenden Drucke gefunden.</p>' : ''}
+    ${cards?.length ? `<p class="hint">${P.found} ${what}${P.found > cards.length ? `, ${cards.length} angezeigt` : ''}.</p>` : ''}
     <div class="alts">
       ${(cards || [])
         .map((c) => {
@@ -512,7 +552,7 @@ function renderLandPicker() {
               ${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" />` : ''}
               <span class="count" ${n ? '' : 'hidden'} data-land-n="${esc(c.id)}">${n}×</span>
             </button>
-            <span>${esc(c.set.toUpperCase())} #${esc(c.collector_number)} · ${esc((c.released_at || '').slice(0, 4))}</span>
+            <span>${esc(c.set.toUpperCase())} #${esc(c.collector_number)} · ${esc((c.released_at || '').slice(0, 4))}${c.lang !== 'de' ? ` · <b>${esc(c.lang.toUpperCase())}</b>` : ''}</span>
             ${c.image_status === 'lowres' ? '<span class="verdict bad">unscharfer Scan</span>' : ''}
             <span class="land-step">
               <button class="btn small" data-land-minus="${esc(c.id)}" aria-label="Einen weniger">−</button>
@@ -552,7 +592,8 @@ function applyLandPicks() {
     fresh.push({
       id: state.nextId++, name: P.name, count: n, set: card.set, number: card.collector_number,
       isCommander: false, nameOverride: '',
-      res: { base, chosen: card, status: card.lang === 'de' ? STATUS.other : STATUS.english, picked: true, explicitPrint: true, checks: {} },
+      // Standardländer haben keinen Regeltext – auch fremdsprachige Drucke gelten als gewählt, Name bleibt deutsch
+      res: { base, chosen: card, status: STATUS.other, picked: true, landName: P.deName, explicitPrint: true, checks: {} },
     });
   }
   // Rest mit der automatischen Auswahl auffüllen
@@ -609,12 +650,16 @@ dialog.addEventListener('click', (ev) => {
     loadLandPrints(true);
   }
 });
+dialog.addEventListener('click', (ev) => {
+  const v = ev.target.closest('[data-land-view]')?.dataset.landView;
+  if (!landPicker || !v || v === landPicker.view) return;
+  landPicker.view = v;
+  showLandView();
+});
 dialog.addEventListener('change', (ev) => {
-  if (!landPicker || !ev.target.matches('[data-land-fullart]')) return;
-  landPicker.fullArt = ev.target.checked;
-  landPicker.cards = null;
-  renderLandPicker();
-  loadLandPrints();
+  if (!landPicker || !ev.target.matches('[data-land-lang]')) return;
+  landPicker.lang = ev.target.value;
+  showLandView();
 });
 dialog.addEventListener('close', () => {
   // Das close-Ereignis kommt verzögert – wurde inzwischen neu geöffnet, Auswahl behalten

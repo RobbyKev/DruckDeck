@@ -99,9 +99,10 @@ export async function germanPrints(oid) {
 }
 
 // Deutsche Drucke eines Standardlands (z. B. „Swamp“) für die Länder-Auswahl.
+// lang: Sprachcode ('de', 'ja', …) oder 'any' für alle Sprachen.
 // pageUrl: next_page aus einer vorherigen Antwort, um weitere Drucke zu laden.
-export async function basicLandPrints(englishName, { fullArt = false, pageUrl = null } = {}) {
-  const q = `!"${englishName}" lang:de game:paper${fullArt ? ' is:fullart' : ''}`;
+export async function basicLandPrints(englishName, { fullArt = false, lang = 'de', pageUrl = null } = {}) {
+  const q = `!"${englishName}" lang:${lang} game:paper${fullArt ? ' is:fullart' : ''}`;
   const url = pageUrl || `${API}/cards/search?q=${enc(q)}&unique=prints&order=released&dir=desc`;
   const res = await getJSON(url);
   return { cards: res?.data || [], next: res?.has_more ? res.next_page : null, total: res?.total_cards || 0 };
