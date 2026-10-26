@@ -1,9 +1,12 @@
-# Baut DruckDeck bei jedem Push auf main und veröffentlicht es auf GitHub Pages.
+# Baut DruckDeck bei jedem Push auf main (und täglich) und veröffentlicht es auf GitHub Pages.
 name: Auf GitHub Pages veröffentlichen
 
 on:
   push:
     branches: [main]
+  # Täglich neu bauen, damit neue Precons in der Übersicht auftauchen
+  schedule:
+    - cron: '17 4 * * *'
   workflow_dispatch:
 
 permissions:
@@ -25,6 +28,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run precons
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
