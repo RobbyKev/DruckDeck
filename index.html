@@ -19,7 +19,7 @@
         <h2><span class="step">I</span> Deck wählen</h2>
         <div class="tabs" role="tablist">
           <button role="tab" class="tab active" data-tab="precon" aria-selected="true">Precon</button>
-          <button role="tab" class="tab" data-tab="browse" aria-selected="false">Alle Precons</button>
+          <button role="tab" class="tab" data-tab="browse" aria-selected="false">Alle Decks</button>
           <button role="tab" class="tab" data-tab="list" aria-selected="false">Liste einfügen</button>
         </div>
 
@@ -44,6 +44,7 @@
               <label class="check"><input type="checkbox" id="browse-exact" /> genau diese Farben</label>
             </div>
             <div class="browse-row">
+              <select id="browse-type" aria-label="Deck-Art"><option value="Commander Deck">Commander-Decks</option></select>
               <select id="browse-year" aria-label="Jahr"><option value="">Alle Jahre</option></select>
               <select id="browse-set" aria-label="Set"><option value="">Alle Sets</option></select>
               <select id="browse-sort" aria-label="Sortierung">
@@ -87,6 +88,7 @@
           <div class="actions">
             <label class="check"><input type="checkbox" id="opt-lands" checked /> Standardländer mitdrucken</label>
             <label class="check"><input type="checkbox" id="opt-backs" checked /> Rückseiten doppelseitiger Karten mitdrucken</label>
+            <label class="check"><input type="checkbox" id="opt-trans" checked /> Übersetzungen englischer Karten mitdrucken</label>
             <label class="check">Abstand zum Schneiden
               <select id="opt-gap">
                 <option value="0">kein Abstand</option>

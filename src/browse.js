@@ -17,7 +17,25 @@ const manaHtml = (colors) =>
     .map((c) => `<img class="mana" src="${symbol(c)}" alt="${COLOR_NAMES[c]}" title="${COLOR_NAMES[c]}" />`)
     .join('');
 
-const filter = { text: '', colors: new Set(), exact: false, year: '', set: '', sort: 'new' };
+// Deutsche Bezeichnungen für die häufigsten Deck-Arten von MTGJSON
+const TYPE_NAMES = {
+  'Commander Deck': 'Commander-Decks',
+  'Secret Lair Drop': 'Secret Lair',
+  'Theme Deck': 'Themendecks',
+  'Intro Pack': 'Intro-Packs',
+  'Duel Deck': 'Duel Decks',
+  'Planeswalker Deck': 'Planeswalker-Decks',
+  'Challenger Deck': 'Challenger-Decks',
+  'Starter Deck': 'Starterdecks',
+  'Welcome Deck': 'Willkommensdecks',
+  'Game Night Deck': 'Game-Night-Decks',
+  'Brawl Deck': 'Brawl-Decks',
+  'Planechase Deck': 'Planechase-Decks',
+  'Archenemy Deck': 'Archenemy-Decks',
+};
+const typeName = (t) => TYPE_NAMES[t] || t;
+
+const filter = { text: '', type: 'Commander Deck', colors: new Set(), exact: false, year: '', set: '', sort: 'new' };
 let decks = null;
 let onLoadDeck = null;
 
@@ -46,14 +64,15 @@ export function initBrowse({ onLoad }) {
     filter.exact = ev.target.checked;
     render();
   });
-  for (const [id, key] of [['#browse-year', 'year'], ['#browse-set', 'set'], ['#browse-sort', 'sort']]) {
+  for (const [id, key] of [['#browse-type', 'type'], ['#browse-year', 'year'], ['#browse-set', 'set'], ['#browse-sort', 'sort']]) {
     $(id).addEventListener('change', (ev) => {
       filter[key] = ev.target.value;
       render();
     });
   }
   $('#browse-reset').addEventListener('click', () => {
-    Object.assign(filter, { text: '', year: '', set: '', exact: false });
+    Object.assign(filter, { text: '', type: 'Commander Deck', year: '', set: '', exact: false });
+    $('#browse-type').value = 'Commander Deck';
     filter.colors.clear();
     $('#browse-search').value = '';
     $('#browse-year').value = '';
@@ -77,12 +96,22 @@ async function loadData() {
     decks = (await res.json()).decks.map((d) => ({
       ...d,
       year: (d.releaseDate || '').slice(0, 4),
-      hay: norm([d.name, d.code, d.setName, ...d.commanders.flatMap((c) => [c.name, c.deName])].join(' ')),
+      hay: norm([d.name, d.code, d.setName, typeName(d.type), ...d.commanders.flatMap((c) => [c.name, c.deName])].join(' ')),
     }));
   } catch (err) {
     $('#browse-status').textContent = `Übersicht nicht verfügbar (${err.message}).`;
     return;
   }
+
+  const types = new Map();
+  for (const d of decks) types.set(d.type, (types.get(d.type) || 0) + 1);
+  $('#browse-type').innerHTML =
+    `<option value="">Alle Deck-Arten (${decks.length})</option>` +
+    [...types.entries()]
+      .sort((a, b) => (a[0] === 'Commander Deck' ? -1 : b[0] === 'Commander Deck' ? 1 : b[1] - a[1]))
+      .map(([t, n]) => `<option value="${esc(t)}">${esc(typeName(t))} (${n})</option>`)
+      .join('');
+  $('#browse-type').value = filter.type;
 
   const years = [...new Set(decks.map((d) => d.year))].sort().reverse();
   $('#browse-year').innerHTML += years.map((y) => `<option value="${y}">${y}</option>`).join('');
@@ -96,6 +125,7 @@ async function loadData() {
 
 function matches(d) {
   if (filter.text && !filter.text.split(/\s+/).every((w) => d.hay.includes(w))) return false;
+  if (filter.type && d.type !== filter.type) return false;
   if (filter.year && d.year !== filter.year) return false;
   if (filter.set && d.code !== filter.set) return false;
   if (filter.colors.size) {
@@ -109,6 +139,8 @@ function matches(d) {
   }
   return true;
 }
+
+const LIMIT = 300;
 
 const SORTS = {
   new: (a, b) => b.releaseDate.localeCompare(a.releaseDate) || a.name.localeCompare(b.name),
@@ -127,6 +159,7 @@ function tileHtml(d) {
     <span class="precon-info">
       <span class="precon-name">${esc(d.name)}</span>
       <span class="precon-cmd">${esc(names)}</span>
+      ${filter.type === 'Commander Deck' ? '' : `<span class="precon-type">${esc(typeName(d.type))}</span>`}
       <span class="precon-meta"><span>${esc(d.setName || d.code)} · ${esc(d.year)}</span><span class="mana-row">${manaHtml(d.colors)}</span></span>
     </span>
   </button>`;
@@ -135,9 +168,12 @@ function tileHtml(d) {
 function render() {
   if (!decks) return;
   const list = decks.filter(matches).sort(SORTS[filter.sort]);
-  $('#browse-status').textContent = `${list.length} von ${decks.length} Precons`;
+  // Bei vielen Treffern nur die ersten anzeigen, damit die Seite flüssig bleibt
+  const shown = list.slice(0, LIMIT);
+  $('#browse-status').textContent =
+    `${list.length} von ${decks.length} Decks` + (list.length > shown.length ? ` · die ersten ${shown.length} angezeigt – Filter oder Suche eingrenzen` : '');
   $('#browse-grid').innerHTML = list.length
-    ? list.map(tileHtml).join('')
+    ? shown.map(tileHtml).join('')
     : '<p class="hint">Keine Precons passen zu diesen Filtern.</p>';
 }
 
@@ -193,7 +229,7 @@ async function openDetail(d) {
       <div>
         <h3>${esc(d.name)}</h3>
         <p class="meta">${esc(d.setName || d.code)} (${esc(d.code)}) · ${esc(new Date(d.releaseDate).toLocaleDateString('de-DE'))}</p>
-        <p class="meta">${d.commanders.map((c) => esc(c.deName || c.name)).join(' & ')}</p>
+        <p class="meta">${esc(typeName(d.type))} · ${d.commanders.map((c) => esc(c.deName || c.name)).join(' & ')}</p>
         <div class="row"><span class="mana-row big">${manaHtml(d.colors)}</span><span class="meta">${d.count} Karten</span></div>
         <button class="btn primary" data-load-precon="${esc(d.fileName)}">Dieses Deck laden</button>
       </div>

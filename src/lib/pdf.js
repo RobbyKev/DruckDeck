@@ -80,7 +80,7 @@ function cutMarks(doc, L) {
   }
 }
 
-function checklist(doc, { deckName, total, lines, hasDoubleFaced, gap }) {
+function checklist(doc, { deckName, total, lines, hasDoubleFaced, gap, hasTranslations }) {
   const M = 16;
   let y = 22;
   doc.setTextColor(20);
@@ -152,17 +152,92 @@ function checklist(doc, { deckName, total, lines, hasDoubleFaced, gap }) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(90);
-  let ny = PAGE.h - 17;
-  if (hasDoubleFaced) {
-    doc.text('* Doppelseitige Karte: Rückseite wird direkt hinter der Vorderseite gedruckt – beide in eine Hülle.', M, ny);
+  const notes = [];
+  if (hasDoubleFaced) notes.push('* Doppelseitige Karte: Rückseite wird direkt hinter der Vorderseite gedruckt – beide in eine Hülle.');
+  if (hasTranslations) notes.push('(EN) = nur englisches Bild verfügbar – deutsche Übersetzung zum Ausschneiden auf den letzten Seiten.');
+  let ny = PAGE.h - 13 - 4 * notes.length;
+  for (const note of notes) {
+    doc.text(note, M, ny);
     ny += 4;
   }
   doc.setFont('helvetica', 'italic');
   doc.text('Nur für private Runden, nicht zum Verkauf.', M, ny);
 }
 
+// Die Standardschrift im PDF kennt nur den Windows-1252-Zeichensatz – andere
+// Zeichen aus Scryfall-Texten ersetzen, damit nichts als Zeichensalat erscheint.
+const WIN_ANSI_EXTRA = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
+function winAnsi(s) {
+  return String(s || '')
+    .replace(/[\u2212\u2011\u2010]/g, '-')
+    .replace(/\u2022/g, '•')
+    .replace(/[^\n\x20-\x7e\xa0-\xff]/g, (ch) => (WIN_ANSI_EXTRA.includes(ch) ? ch : '?'));
+}
+
+// Übersetzungs-Zettel in Kartengröße: deutscher Name, Typzeile und Regeltext.
+// Die Schrift wird verkleinert, bis der Text in die Karte passt.
+function drawTranslation(doc, x, y, t, englishName) {
+  const pad = 3.5;
+  const w = CARD.w - 2 * pad;
+  const footerH = 4;
+  const lh = (fs) => fs * 0.3528 * 1.22;
+  const layout = (fs) => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(fs + 1.5);
+    const name = doc.splitTextToSize(winAnsi(t.name || englishName), w);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(fs - 0.5);
+    const type = t.type ? doc.splitTextToSize(winAnsi(t.type), w) : [];
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(fs);
+    const text = winAnsi(t.text)
+      .split('\n')
+      .flatMap((p) => (p.trim() ? doc.splitTextToSize(p, w) : ['']));
+    const height = name.length * lh(fs + 1.5) + 1.5 + type.length * lh(fs - 0.5) + 2.5 + text.length * lh(fs);
+    return { fs, name, type, text, height };
+  };
+  let L = layout(8.5);
+  while (L.fs > 5 && L.height > CARD.h - 2 * pad - footerH) L = layout(L.fs - 0.25);
+
+  doc.setDrawColor(170);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(x, y, CARD.w, CARD.h, 3, 3, 'S');
+  doc.setTextColor(20);
+  let cy = y + pad + lh(L.fs + 1.5) * 0.8;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(L.fs + 1.5);
+  for (const line of L.name) {
+    doc.text(line, x + pad, cy);
+    cy += lh(L.fs + 1.5);
+  }
+  cy += 0.5;
+  if (L.type.length) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(L.fs - 0.5);
+    doc.setTextColor(70);
+    for (const line of L.type) {
+      doc.text(line, x + pad, cy);
+      cy += lh(L.fs - 0.5);
+    }
+  }
+  doc.setDrawColor(200);
+  doc.line(x + pad, cy - lh(L.fs) * 0.45, x + CARD.w - pad, cy - lh(L.fs) * 0.45);
+  cy += 1.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(L.fs);
+  doc.setTextColor(20);
+  for (const line of L.text) {
+    if (line) doc.text(line, x + pad, cy);
+    cy += lh(L.fs);
+  }
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(5.5);
+  doc.setTextColor(130);
+  doc.text(winAnsi(`Übersetzung · ${englishName}`), x + pad, y + CARD.h - 2.5, { maxWidth: w });
+}
+
 // entries: sortierte, aufgelöste Einträge (siehe main.js)
-// options: { includeLands, includeBacks, gap }
+// options: { includeLands, includeBacks, gap, includeTranslations }
 export async function buildPdf({ deckName, entries, options, onProgress }) {
   const L = gridLayout(options.gap || 0);
   const printed = entries.filter((e) => e.res?.chosen && (options.includeLands || !e.basic));
@@ -223,7 +298,15 @@ export async function buildPdf({ deckName, entries, options, onProgress }) {
     bold: g.isCommander,
   }));
   const total = printed.reduce((n, e) => n + e.count, 0);
-  checklist(doc, { deckName, total, lines, hasDoubleFaced: printed.some(hasBack), gap: L.gap });
+  // Englische Karten mit deutschem Text bekommen je Exemplar einen Übersetzungs-Zettel
+  const translations = options.includeTranslations
+    ? printed
+        .filter((e) => e.res.status === 'english' && (e.translation?.text || e.translation?.name))
+        .flatMap((e) => Array.from({ length: e.count }, () => e))
+    : [];
+  checklist(doc, {
+    deckName, total, lines, hasDoubleFaced: printed.some(hasBack), gap: L.gap, hasTranslations: translations.length > 0,
+  });
 
   const placeSlots = (slots) => {
     for (let i = 0; i < slots.length; i++) {
@@ -241,6 +324,18 @@ export async function buildPdf({ deckName, entries, options, onProgress }) {
   };
   placeSlots(spellSlots);
   placeSlots(landSlots); // Länder auf eigenen Seiten am Ende
+
+  // Übersetzungen auf eigenen Seiten ganz am Ende (gleiches Raster, ohne Anschnitt)
+  translations.forEach((e, i) => {
+    const pos = i % (COLS * ROWS);
+    if (pos === 0) {
+      doc.addPage();
+      cutMarks(doc, L);
+    }
+    const x = L.gx + (pos % COLS) * (CARD.w + L.gap);
+    const y = L.gy + Math.floor(pos / COLS) * (CARD.h + L.gap);
+    drawTranslation(doc, x, y, e.translation, e.res.chosen.name);
+  });
 
   const pages = doc.getNumberOfPages();
   for (let p = 1; p <= pages; p++) {

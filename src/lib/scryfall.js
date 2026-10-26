@@ -62,6 +62,29 @@ export function germanFaceNames(card) {
   });
 }
 
+// Deutscher Name, Typzeile und Regeltext eines deutschen Drucks – für die
+// Übersetzungsseite, wenn nur ein englisches Bild verfügbar ist.
+export function germanText(card) {
+  if (!card || card.lang !== 'de') return null;
+  const faces = card.card_faces?.length > 1 ? card.card_faces : [card];
+  const text = faces.map((f) => f.printed_text || '').filter(Boolean).join('\n\n');
+  const oracle = faces.map((f) => f.oracle_text || '').filter(Boolean).join('\n\n');
+  // Manche „deutschen“ Einträge enthalten nur den englischen Text
+  if (!text || text === oracle) return null;
+  const names = germanFaceNames(card);
+  return {
+    name: germanName(card) || faces.map((f, i) => names[i] || f.name).join(' // '),
+    type: faces.map((f) => f.printed_type_line || '').filter(Boolean).join(' // '),
+    text,
+  };
+}
+
+// Aus mehreren deutschen Drucken den besten Text wählen (mit Typzeile bevorzugt)
+export function bestGermanText(cards) {
+  const all = cards.map(germanText).filter(Boolean);
+  return all.find((t) => t.type) || all[0] || null;
+}
+
 export function isBasicLand(card) {
   const type = card?.type_line || card?.card_faces?.[0]?.type_line || '';
   return /\bBasic\b/.test(type) && /\bLand\b/.test(type);
@@ -155,7 +178,9 @@ export async function resolveEntry(entry) {
     }
   }
 
-  return result(base, base, STATUS.english, { checks, explicitPrint, originalId: original?.id, prints });
+  // Kein deutsches Bild: wenigstens den deutschen Text für die Übersetzungsseite merken
+  const deText = bestGermanText([original, ...prints].filter(Boolean));
+  return result(base, base, STATUS.english, { checks, explicitPrint, originalId: original?.id, prints, deText });
 }
 
 function result(base, chosen, status, extra) {

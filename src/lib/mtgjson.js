@@ -29,7 +29,10 @@ export async function loadPrecon(fileName) {
       prev.count += card.count || 1;
       prev.isCommander ||= isCommander;
     } else {
+      const de = (card.foreignData || []).find((f) => f.language === 'German');
       merged.set(key, {
+        // Deutscher Text aus MTGJSON als Reserve für die Übersetzungsseite
+        foreign: de?.text ? { name: de.name || '', type: '', text: de.text } : null,
         name: card.name,
         count: card.count || 1,
         set: card.setCode?.toLowerCase() || null,

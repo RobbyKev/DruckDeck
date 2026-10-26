@@ -9,7 +9,7 @@ import { getJSON, TTL, onThrottle } from './lib/net.js';
 import { clearCache } from './lib/cache.js';
 import {
   resolveEntry, verifyGerman, germanPrints, basicLandPrints, statusFor, oracleId,
-  faceImages, germanName, germanFaceNames, isBasicLand, STATUS,
+  faceImages, germanName, germanFaceNames, bestGermanText, isBasicLand, STATUS,
 } from './lib/scryfall.js';
 import { buildPdf, pdfFileName } from './lib/pdf.js';
 import { initBrowse } from './browse.js';
@@ -21,7 +21,7 @@ const esc = (s) =>
 const state = {
   deckName: '',
   entries: [],
-  options: { includeLands: true, includeBacks: true, gap: 2 },
+  options: { includeLands: true, includeBacks: true, gap: 2, includeTranslations: true },
   landAuto: {}, // Landname → automatische Einträge, solange Länder selbst gewählt sind
   nextId: 0,
   runId: 0,
@@ -44,6 +44,11 @@ const BADGE = {
 
 function refresh(e) {
   const card = e.res?.chosen;
+  // Englische Karte: deutschen Text für die Übersetzungsseite bereitstellen (bearbeitbar)
+  if (e.res?.status === STATUS.english && !e.translation) {
+    const t = e.res.deText || bestGermanText(e.res.prints || []) || e.foreign;
+    e.translation = { name: t?.name || '', type: t?.type || '', text: t?.text || '' };
+  }
   e.basic = isBasicLand(e.res?.base || card);
   e.faces = card ? faceImages(card) : [];
   const de = card ? germanName(card) : null;
@@ -53,7 +58,8 @@ function refresh(e) {
   const partial = faceNames.some(Boolean)
     ? card.card_faces.map((f, i) => faceNames[i] || f.name).join(' // ')
     : null;
-  e.displayName = e.nameOverride || e.res?.landName || de || (card?.lang === 'de' && partial) || card?.name || e.name;
+  const translated = e.res?.status === STATUS.english ? e.translation?.name : null;
+  e.displayName = e.nameOverride || e.res?.landName || de || (card?.lang === 'de' && partial) || translated || card?.name || e.name;
 }
 
 function sortedEntries() {
@@ -288,6 +294,7 @@ function cardHtml(e) {
            value="${esc(e.displayName)}" aria-label="Deutscher Name" />
     <span class="badge ${status}">${esc(BADGE[status](e))}</span>
     ${e.nameMissing ? '<p class="note">Deutscher Name fehlt bei Scryfall – bitte selbst eintragen.</p>' : ''}
+    ${status === STATUS.english ? `<p class="note">${e.translation?.text ? 'Deutsche Übersetzung wird extra gedruckt.' : 'Kein deutscher Text gefunden – Karte anklicken und selbst eintragen.'}</p>` : ''}
     ${status === STATUS.missing && e.res?.note ? `<p class="note">${esc(e.name)}: ${esc(e.res.note)}</p>` : ''}
   </article>`;
 }
@@ -322,6 +329,9 @@ $('#opt-lands').addEventListener('change', (ev) => {
 });
 $('#opt-backs').addEventListener('change', (ev) => {
   state.options.includeBacks = ev.target.checked;
+});
+$('#opt-trans').addEventListener('change', (ev) => {
+  state.options.includeTranslations = ev.target.checked;
 });
 
 // Abstand zum Schneiden (mm), im Browser gemerkt
@@ -378,6 +388,19 @@ function verdictHtml(check, id) {
   return `<span class="verdict bad" ${attr}>✗ ${esc(check.reason || 'nicht deutsch')}</span>`;
 }
 
+function translationHtml(e) {
+  const t = e.translation || { name: '', type: '', text: '' };
+  return `<div class="translation">
+    <h4 class="alt-title">Deutsche Übersetzung <span class="hint">– wird im PDF als Zettel zum Ausschneiden gedruckt</span></h4>
+    ${t.text ? '' : '<p class="note">Kein offizieller deutscher Text gefunden – bitte selbst eintragen.</p>'}
+    <div class="translation-grid">
+      <label class="field"><span>Name</span><input type="text" data-tr="name" value="${esc(t.name)}" /></label>
+      <label class="field"><span>Typzeile</span><input type="text" data-tr="type" value="${esc(t.type)}" placeholder="z. B. Kreatur — Elf, Druide" /></label>
+    </div>
+    <label class="field"><span>Regeltext</span><textarea data-tr="text" rows="5">${esc(t.text)}</textarea></label>
+  </div>`;
+}
+
 function renderDialog(e) {
   const card = e.res.chosen;
   const img = faceImages(card)[0]?.normal;
@@ -393,6 +416,7 @@ function renderDialog(e) {
         <label class="check"><input type="checkbox" data-commander ${e.isCommander ? 'checked' : ''} /> Kommandant</label>
       </div>
     </div>
+    ${e.res.status === STATUS.english ? translationHtml(e) : ''}
     <h4 class="alt-title">Drucke zum Austauschen</h4>
     ${prints ? '' : '<p class="hint">Suche deutsche Drucke …</p>'}
     ${prints && !prints.length ? '<p class="hint">Kein deutscher Druck bei Scryfall vorhanden.</p>' : ''}
@@ -424,7 +448,20 @@ dialog.addEventListener('click', (ev) => {
     render();
   }
 });
+dialog.addEventListener('input', (ev) => {
+  const field = ev.target.dataset?.tr;
+  if (!field) return;
+  const e = byId(dialog.dataset.entry);
+  if (!e) return;
+  e.translation ||= { name: '', type: '', text: '' };
+  e.translation[field] = ev.target.value;
+});
 dialog.addEventListener('change', (ev) => {
+  if (ev.target.dataset?.tr) {
+    const e = byId(dialog.dataset.entry);
+    if (e) refresh(e);
+    return render();
+  }
   if (!ev.target.matches('[data-commander]')) return;
   const e = byId(dialog.dataset.entry);
   e.isCommander = ev.target.checked;
