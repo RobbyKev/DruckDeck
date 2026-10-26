@@ -25,6 +25,8 @@ function devSavePdf() {
 }
 
 export default defineConfig({
+  // Relative Pfade: läuft so unter github.io/druckdeck/ genauso wie auf einer eigenen Domain
+  base: './',
   plugins: [devSavePdf()],
   server: { host: '127.0.0.1', port: 5173 },
 });
