@@ -1,3 +1,4 @@
+[README.md](https://github.com/user-attachments/files/33974458/README.md)
 # DruckDeck
 
 Magic-the-Gathering-Commander-Decks als **deutsche Proxys** auf A4 drucken. Reine statische Web-App (Vite, Vanilla JS), läuft komplett im Browser – ohne Anmeldung, Backend oder Tracking. Nur für den privaten Gebrauch.
@@ -34,12 +35,14 @@ npm run build    # Ausgabe in dist/
 
 Im Dev-Modus gibt es `window.__dd` und den Endpunkt `/__dev/save` (nur Dev-Server), damit automatische Tests PDFs nach `test-output/` speichern können. Beides ist im Produktions-Build nicht enthalten.
 
-## Hosting auf Cloudflare Pages
+## Hosting auf GitHub Pages
 
-1. Repo auf GitHub anlegen und pushen.
-2. Cloudflare Dashboard → Workers & Pages → Erstellen → Pages → Mit Git verbinden → Repo wählen.
-3. Framework-Preset: **Vite** (bzw. Build-Befehl `npm run build`, Ausgabeverzeichnis `dist`).
-4. Speichern und bereitstellen.
+Der Workflow `.github/workflows/deploy.yml` baut die App bei jedem Push auf `main` und veröffentlicht sie unter `https://<name>.github.io/druckdeck/`.
+
+1. Repo öffentlich stellen (für GitHub Pages mit kostenlosem Konto nötig).
+2. Settings → Pages → Source: **GitHub Actions**.
+
+Wegen `base: './'` in `vite.config.js` läuft der Build auch auf jedem anderen statischen Hoster (z. B. Cloudflare Pages: Build-Befehl `npm run build`, Ausgabe `dist`).
 
 ## Datenquellen
 
