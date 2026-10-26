@@ -20,7 +20,7 @@ const esc = (s) =>
 const state = {
   deckName: '',
   entries: [],
-  options: { includeLands: true, includeBacks: true },
+  options: { includeLands: true, includeBacks: true, gap: 2 },
   runId: 0,
 };
 
@@ -312,6 +312,19 @@ $('#opt-lands').addEventListener('change', (ev) => {
 });
 $('#opt-backs').addEventListener('change', (ev) => {
   state.options.includeBacks = ev.target.checked;
+});
+
+// Abstand zum Schneiden (mm), im Browser gemerkt
+try {
+  const saved = localStorage.getItem('druckdeck.gap');
+  if (saved !== null) state.options.gap = Number(saved);
+} catch {}
+$('#opt-gap').value = String(state.options.gap);
+$('#opt-gap').addEventListener('change', (ev) => {
+  state.options.gap = Number(ev.target.value);
+  try {
+    localStorage.setItem('druckdeck.gap', ev.target.value);
+  } catch {}
 });
 
 // ---------- Dialog: Alternativen ----------

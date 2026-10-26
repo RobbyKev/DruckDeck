@@ -1,5 +1,5 @@
-// PDF-Erzeugung im Browser: A4 hochkant, 3×3 Karten à 63×88 mm, Schnittmarken,
-// Checkliste auf Seite 1.
+// PDF-Erzeugung im Browser: A4 hochkant, 3×3 Karten à 63×88 mm (wahlweise mit
+// Abstand und Anschnitt), Schnittmarken, Checkliste auf Seite 1.
 
 import { jsPDF } from 'jspdf';
 import { getImageBlob } from './net.js';
@@ -8,23 +8,42 @@ const PAGE = { w: 210, h: 297 };
 const CARD = { w: 63, h: 88 };
 const COLS = 3;
 const ROWS = 3;
-const GRID = { w: CARD.w * COLS, h: CARD.h * ROWS };
-const GX = (PAGE.w - GRID.w) / 2;
-const GY = (PAGE.h - GRID.h) / 2;
-const MARK = { from: 2, to: 8 };
 const JPEG_QUALITY = 0.9;
+const PRINTER_MARGIN = 3; // Schnittmarken nicht näher als 3 mm an den Blattrand
 
-// PNG (745×1040, transparente Ecken) → JPEG mit schwarzen Ecken
-async function toJpeg(url) {
+// Raster abhängig vom Abstand zwischen den Karten (mm). Bei Abstand bekommt jede
+// Karte rundum einen Anschnitt von halbem Abstand, damit ein leicht versetzter
+// Schnitt keinen weißen Rand zeigt.
+function gridLayout(gap) {
+  const bleed = gap / 2;
+  const w = CARD.w * COLS + gap * (COLS - 1);
+  const h = CARD.h * ROWS + gap * (ROWS - 1);
+  const gx = (PAGE.w - w) / 2;
+  const gy = (PAGE.h - h) / 2;
+  const markFrom = Math.max(2, bleed + 1);
+  return {
+    gap, bleed, gx, gy, w, h,
+    markFrom,
+    markToX: Math.min(8, gx - PRINTER_MARGIN),
+    markToY: Math.min(8, gy - PRINTER_MARGIN),
+  };
+}
+
+// PNG (745×1040, transparente Ecken) → JPEG. Mit Anschnitt wird das Bild auf
+// die Anschnittgröße gestreckt hinterlegt, sodass Rand und Ecken nach außen
+// weiterlaufen; ohne Anschnitt bekommen die runden Ecken Schwarz.
+async function toJpeg(url, bleedMm) {
   const blob = await getImageBlob(url);
   const bmp = await createImageBitmap(blob);
+  const pad = Math.round((bleedMm * bmp.width) / CARD.w);
   const canvas = document.createElement('canvas');
-  canvas.width = bmp.width;
-  canvas.height = bmp.height;
+  canvas.width = bmp.width + 2 * pad;
+  canvas.height = bmp.height + 2 * pad;
   const c = canvas.getContext('2d');
   c.fillStyle = '#000';
   c.fillRect(0, 0, canvas.width, canvas.height);
-  c.drawImage(bmp, 0, 0);
+  if (pad) c.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  c.drawImage(bmp, pad, pad);
   bmp.close?.();
   const jpeg = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY));
   return new Uint8Array(await jpeg.arrayBuffer());
@@ -37,22 +56,31 @@ function footer(doc, deckName, pageNo) {
   doc.text(`${deckName} · Seite ${pageNo}`, PAGE.w / 2, PAGE.h - 4, { align: 'center' });
 }
 
-function cutMarks(doc) {
+// Schnittmarken an jeder Kartenkante, außerhalb des Rasters
+function cutMarks(doc, L) {
   doc.setDrawColor(160);
   doc.setLineWidth(0.2);
-  for (let c = 0; c <= COLS; c++) {
-    const x = GX + c * CARD.w;
-    doc.line(x, GY - MARK.to, x, GY - MARK.from);
-    doc.line(x, GY + GRID.h + MARK.from, x, GY + GRID.h + MARK.to);
+  const xs = new Set();
+  const ys = new Set();
+  for (let c = 0; c < COLS; c++) {
+    const x = L.gx + c * (CARD.w + L.gap);
+    xs.add(x).add(x + CARD.w);
   }
-  for (let r = 0; r <= ROWS; r++) {
-    const y = GY + r * CARD.h;
-    doc.line(GX - MARK.to, y, GX - MARK.from, y);
-    doc.line(GX + GRID.w + MARK.from, y, GX + GRID.w + MARK.to, y);
+  for (let r = 0; r < ROWS; r++) {
+    const y = L.gy + r * (CARD.h + L.gap);
+    ys.add(y).add(y + CARD.h);
+  }
+  for (const x of xs) {
+    doc.line(x, L.gy - L.markToY, x, L.gy - L.markFrom);
+    doc.line(x, L.gy + L.h + L.markFrom, x, L.gy + L.h + L.markToY);
+  }
+  for (const y of ys) {
+    doc.line(L.gx - L.markToX, y, L.gx - L.markFrom, y);
+    doc.line(L.gx + L.w + L.markFrom, y, L.gx + L.w + L.markToX, y);
   }
 }
 
-function checklist(doc, { deckName, total, lines, hasDoubleFaced }) {
+function checklist(doc, { deckName, total, lines, hasDoubleFaced, gap }) {
   const M = 16;
   let y = 22;
   doc.setTextColor(20);
@@ -67,7 +95,13 @@ function checklist(doc, { deckName, total, lines, hasDoubleFaced }) {
   doc.setTextColor(70);
   doc.text('Druckhinweis: A4 hochkant, Skalierung 100 % / „Tatsächliche Größe“ (nicht „An Seite anpassen“).', M, y);
   y += 4.5;
-  doc.text('Jede Karte misst 63 × 88 mm. Schnittmarken liegen außerhalb des Rasters.', M, y);
+  doc.text(
+    gap
+      ? `Jede Karte misst 63 × 88 mm, mit ${String(gap).replace('.', ',')} mm Abstand und Anschnitt – entlang der Schnittmarken schneiden.`
+      : 'Jede Karte misst 63 × 88 mm. Schnittmarken liegen außerhalb des Rasters.',
+    M,
+    y,
+  );
   y += 7;
 
   const bottom = PAGE.h - 24;
@@ -128,8 +162,9 @@ function checklist(doc, { deckName, total, lines, hasDoubleFaced }) {
 }
 
 // entries: sortierte, aufgelöste Einträge (siehe main.js)
-// options: { includeLands, includeBacks }
+// options: { includeLands, includeBacks, gap }
 export async function buildPdf({ deckName, entries, options, onProgress }) {
+  const L = gridLayout(options.gap || 0);
   const printed = entries.filter((e) => e.res?.chosen && (options.includeLands || !e.basic));
   const spells = printed.filter((e) => !e.basic);
   const lands = printed.filter((e) => e.basic);
@@ -157,7 +192,7 @@ export async function buildPdf({ deckName, entries, options, onProgress }) {
   const workers = Array.from({ length: 4 }, async () => {
     while (urls.length) {
       const url = urls.shift();
-      images.set(url, await toJpeg(url));
+      images.set(url, await toJpeg(url, L.bleed));
       onProgress?.(++done, totalImages);
     }
   });
@@ -188,18 +223,20 @@ export async function buildPdf({ deckName, entries, options, onProgress }) {
     bold: g.isCommander,
   }));
   const total = printed.reduce((n, e) => n + e.count, 0);
-  checklist(doc, { deckName, total, lines, hasDoubleFaced: printed.some(hasBack) });
+  checklist(doc, { deckName, total, lines, hasDoubleFaced: printed.some(hasBack), gap: L.gap });
 
   const placeSlots = (slots) => {
     for (let i = 0; i < slots.length; i++) {
       const pos = i % (COLS * ROWS);
       if (pos === 0) {
         doc.addPage();
-        cutMarks(doc);
+        cutMarks(doc, L);
       }
-      const x = GX + (pos % COLS) * CARD.w;
-      const y = GY + Math.floor(pos / COLS) * CARD.h;
-      doc.addImage(images.get(slots[i]), 'JPEG', x, y, CARD.w, CARD.h, slots[i], 'NONE');
+      const x = L.gx + (pos % COLS) * (CARD.w + L.gap) - L.bleed;
+      const y = L.gy + Math.floor(pos / COLS) * (CARD.h + L.gap) - L.bleed;
+      const w = CARD.w + 2 * L.bleed;
+      const h = CARD.h + 2 * L.bleed;
+      doc.addImage(images.get(slots[i]), 'JPEG', x, y, w, h, slots[i], 'NONE');
     }
   };
   placeSlots(spellSlots);
