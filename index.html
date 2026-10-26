@@ -19,6 +19,7 @@
         <h2><span class="step">I</span> Deck wählen</h2>
         <div class="tabs" role="tablist">
           <button role="tab" class="tab active" data-tab="precon" aria-selected="true">Precon</button>
+          <button role="tab" class="tab" data-tab="browse" aria-selected="false">Alle Precons</button>
           <button role="tab" class="tab" data-tab="list" aria-selected="false">Liste einfügen</button>
         </div>
 
@@ -32,6 +33,29 @@
             </div>
           </label>
           <p class="hint" id="precon-status">Lade Precon-Liste …</p>
+        </div>
+
+        <div class="tab-body" data-body="browse" hidden>
+          <div class="browse-filters">
+            <input id="browse-search" type="search" autocomplete="off" spellcheck="false"
+                   placeholder="Deck, Kommandant oder Set …" />
+            <div class="browse-row">
+              <div class="mana-filter" id="browse-colors" aria-label="Farben"></div>
+              <label class="check"><input type="checkbox" id="browse-exact" /> genau diese Farben</label>
+            </div>
+            <div class="browse-row">
+              <select id="browse-year" aria-label="Jahr"><option value="">Alle Jahre</option></select>
+              <select id="browse-set" aria-label="Set"><option value="">Alle Sets</option></select>
+              <select id="browse-sort" aria-label="Sortierung">
+                <option value="new">Neueste zuerst</option>
+                <option value="old">Älteste zuerst</option>
+                <option value="az">A–Z</option>
+              </select>
+              <button class="link" id="browse-reset" type="button">Filter zurücksetzen</button>
+            </div>
+          </div>
+          <p class="hint" id="browse-status"></p>
+          <div class="precon-grid" id="browse-grid"></div>
         </div>
 
         <div class="tab-body" data-body="list" hidden>

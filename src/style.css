@@ -323,3 +323,73 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(2px); 
 }
 .land-step { display: flex; gap: 6px; }
 .land-step .btn { flex: 1; padding: 4px 0; font-size: 16px; }
+
+/* Alle Precons */
+.browse-filters { display: grid; gap: 12px; margin-bottom: 12px; }
+.browse-row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.browse-row select {
+  font: inherit; font-size: 14px; color: var(--text);
+  background: #0f0d0e; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  max-width: 100%;
+}
+.mana-filter { display: flex; gap: 6px; }
+.mana-btn {
+  width: 38px; height: 38px; padding: 5px; border-radius: 50%;
+  background: #0f0d0e; border: 1px solid var(--line); cursor: pointer;
+  opacity: 0.45; transition: opacity 0.15s, box-shadow 0.15s;
+}
+.mana-btn img { width: 100%; height: 100%; display: block; }
+.mana-btn[aria-pressed='true'] { opacity: 1; border-color: var(--gold); box-shadow: 0 0 0 2px rgba(201, 162, 74, 0.35); }
+.mana-btn:hover { opacity: 0.85; }
+
+.precon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.precon-tile {
+  display: grid; padding: 0; text-align: left; cursor: pointer; color: var(--text);
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: visible; font: inherit;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.precon-tile { position: relative; }
+.precon-tile:hover { transform: translateY(-2px); border-color: var(--gold); z-index: 10; }
+.precon-art {
+  position: relative; display: block; aspect-ratio: 626 / 457;
+  border-radius: var(--radius) var(--radius) 0 0; background: #000;
+}
+.precon-art > img:first-child { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: var(--radius) var(--radius) 0 0; }
+/* Ganze Karte beim Darüberfahren (nur mit Maus) */
+.precon-peek {
+  position: absolute; z-index: 5; left: 50%; top: -6%; width: 78%;
+  transform: translateX(-50%) scale(0.96); opacity: 0; pointer-events: none;
+  border-radius: 4.75% / 3.4%; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.85);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .precon-tile:hover .precon-peek { opacity: 1; transform: translateX(-50%) scale(1); transition-delay: 0.35s; }
+}
+.precon-info { display: grid; gap: 2px; padding: 10px 12px 12px; }
+.precon-name { font: 700 15px var(--font-head); color: var(--gold-2); letter-spacing: 0.02em; }
+.precon-cmd { font-size: 13px; color: var(--text); }
+.precon-meta { display: flex; justify-content: space-between; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.mana-row { display: inline-flex; gap: 3px; }
+.mana { width: 16px; height: 16px; }
+.mana-row.big .mana { width: 24px; height: 24px; }
+
+.precon-detail { display: grid; grid-template-columns: auto 1fr; gap: 20px; margin-bottom: 18px; }
+.precon-detail h3 { font-family: var(--font-head); color: var(--gold-2); margin: 0 0 6px; font-size: 22px; padding-right: 30px; }
+.precon-detail .meta { color: var(--muted); margin: 0 0 8px; }
+.precon-detail .row { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
+.precon-cards { display: flex; gap: 10px; }
+.precon-cards img { width: 220px; border-radius: 4.75% / 3.4%; }
+.precon-list { columns: 3 220px; column-gap: 24px; }
+.precon-list section { break-inside: avoid; margin-bottom: 14px; }
+.precon-list h5 { font: 600 14px var(--font-head); color: var(--gold); margin: 0 0 4px; }
+.precon-list h5 span { color: var(--muted); font-family: var(--font-body); font-weight: 400; }
+.precon-list ul { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+.precon-list li { padding: 1px 0; }
+.precon-list .n { display: inline-block; min-width: 1.6em; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  .precon-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .precon-detail { grid-template-columns: 1fr; }
+  .precon-cards img { width: min(200px, 45vw); }
+}

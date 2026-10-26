@@ -12,6 +12,7 @@ import {
   faceImages, germanName, germanFaceNames, isBasicLand, STATUS,
 } from './lib/scryfall.js';
 import { buildPdf, pdfFileName } from './lib/pdf.js';
+import { initBrowse } from './browse.js';
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) =>
@@ -664,6 +665,7 @@ $('#clear-cache').addEventListener('click', async () => {
 });
 
 initPrecons();
+initBrowse({ onLoad: pickPrecon });
 
 // Nur im Entwicklungsmodus: Zugriff für automatische Tests
 if (import.meta.env.DEV) {
