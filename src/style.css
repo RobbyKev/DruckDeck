@@ -304,3 +304,22 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(2px); 
   .dialog-head { grid-template-columns: 1fr; }
   .dialog-head img { max-width: 220px; }
 }
+
+/* Länder-Auswahl */
+.land-title { font-family: var(--font-head); color: var(--gold-2); margin: 0 0 6px; font-size: 20px; padding-right: 30px; }
+.land-bar {
+  position: sticky; top: -22px; z-index: 2;
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center;
+  margin: 0 -22px 14px; padding: 10px 22px;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.land-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+.land-actions { margin-left: auto; display: flex; gap: 8px; }
+.land-thumb { position: relative; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 4.75% / 3.4%; }
+.land-thumb .count {
+  position: absolute; top: 8%; right: 6%;
+  background: rgba(10, 8, 9, 0.9); border: 1px solid var(--gold); color: var(--gold-2);
+  font: 700 14px var(--font-head); padding: 1px 8px; border-radius: 99px;
+}
+.land-step { display: flex; gap: 6px; }
+.land-step .btn { flex: 1; padding: 4px 0; font-size: 16px; }

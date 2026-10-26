@@ -8,7 +8,7 @@ import { parseDecklist } from './lib/parse.js';
 import { getJSON, TTL, onThrottle } from './lib/net.js';
 import { clearCache } from './lib/cache.js';
 import {
-  resolveEntry, verifyGerman, germanPrints, statusFor, oracleId,
+  resolveEntry, verifyGerman, germanPrints, basicLandPrints, statusFor, oracleId,
   faceImages, germanName, germanFaceNames, isBasicLand, STATUS,
 } from './lib/scryfall.js';
 import { buildPdf, pdfFileName } from './lib/pdf.js';
@@ -21,13 +21,18 @@ const state = {
   deckName: '',
   entries: [],
   options: { includeLands: true, includeBacks: true, gap: 2 },
+  landAuto: {}, // Landname → automatische Einträge, solange Länder selbst gewählt sind
+  nextId: 0,
   runId: 0,
 };
 
 const BADGE = {
   [STATUS.original]: (e) =>
     e.res.explicitPrint ? 'deutsch, Original-Druck' : `deutsch (${e.res.chosen.set.toUpperCase()})`,
-  [STATUS.other]: (e) => `deutsch, anderer Druck (${e.res.chosen.set.toUpperCase()})`,
+  [STATUS.other]: (e) =>
+    e.res.picked
+      ? `deutsch, selbst gewählt (${e.res.chosen.set.toUpperCase()})`
+      : `deutsch, anderer Druck (${e.res.chosen.set.toUpperCase()})`,
   [STATUS.english]: () => 'nur Englisch verfügbar',
   [STATUS.missing]: (e) => (e.res?.failed ? 'Laden fehlgeschlagen' : 'nicht gefunden'),
 };
@@ -219,6 +224,8 @@ async function loadDeck(name, rawEntries) {
   const runId = ++state.runId;
   state.deckName = name;
   state.entries = rawEntries.map((e, i) => ({ ...e, id: i, res: null, nameOverride: '' }));
+  state.nextId = state.entries.length;
+  state.landAuto = {};
   state.entries.forEach(refresh);
   $('#review-panel').hidden = true;
 
@@ -341,6 +348,8 @@ function chooseCard(e, card) {
 
 async function openDialog(e) {
   if (!e?.res?.base) return;
+  if (e.basic && !e.isCommander) return openLandPicker(e);
+  landPicker = null;
   dialog.dataset.entry = e.id;
   renderDialog(e);
   dialog.showModal();
@@ -418,6 +427,199 @@ dialog.addEventListener('change', (ev) => {
   e.isCommander = ev.target.checked;
   render();
 });
+// ---------- Dialog: Länder selbst auswählen ----------
+// Standardmäßig bleiben die Länder automatisch (wie im Deck). Hier kann man für
+// eine Landart (z. B. alle Sümpfe) gezielt Drucke wählen, etwa 8 verschiedene
+// Full-Art-Sümpfe. Nicht vergebene Plätze werden automatisch aufgefüllt.
+
+let landPicker = null;
+
+const landGroup = (name) => state.entries.filter((e) => e.basic && !e.isCommander && e.res?.base?.name === name);
+
+function openLandPicker(e) {
+  const name = e.res.base.name;
+  const group = landGroup(name);
+  const picks = new Map();
+  for (const g of group) {
+    if (g.res.picked) picks.set(g.res.chosen.id, { card: g.res.chosen, n: g.count });
+  }
+  landPicker = {
+    name,
+    deName: group.find((g) => !g.nameOverride)?.displayName || e.displayName,
+    total: group.reduce((n, g) => n + g.count, 0),
+    picks,
+    fullArt: true,
+    cards: null,
+    next: null,
+    found: 0,
+  };
+  dialog.dataset.entry = '';
+  renderLandPicker();
+  dialog.showModal();
+  loadLandPrints();
+}
+
+async function loadLandPrints(more = false) {
+  const P = landPicker;
+  if (!P) return;
+  try {
+    const page = await basicLandPrints(P.name, { fullArt: P.fullArt, pageUrl: more ? P.next : null });
+    if (P !== landPicker) return;
+    P.cards = more ? [...(P.cards || []), ...page.cards] : page.cards;
+    P.next = page.next;
+    P.found = page.total;
+  } catch (err) {
+    P.cards ||= [];
+    P.error = err.message;
+  }
+  renderLandPicker();
+}
+
+const pickedCount = (P) => [...P.picks.values()].reduce((n, p) => n + p.n, 0);
+
+function landHeadHtml(P) {
+  const n = pickedCount(P);
+  return `${n} von ${P.total} selbst gewählt${n < P.total ? ` · ${P.total - n} automatisch` : ''}`;
+}
+
+function renderLandPicker() {
+  const P = landPicker;
+  if (!P) return;
+  const cards = P.cards;
+  $('#dialog-body').innerHTML = `
+    <h3 class="land-title">${esc(P.deName)} – ${P.total}× im Deck</h3>
+    <p class="hint">Klick auf ein Bild fügt einen Druck hinzu, „−“ nimmt ihn wieder weg. Plätze, die du nicht vergibst, bleiben automatisch.</p>
+    <div class="land-bar">
+      <label class="check"><input type="checkbox" data-land-fullart ${P.fullArt ? 'checked' : ''} /> Nur Full-Art</label>
+      <span class="land-count" data-land-count>${landHeadHtml(P)}</span>
+      <span class="land-actions">
+        <button class="btn small" data-land-reset>Automatisch</button>
+        <button class="btn small primary" data-land-apply>Übernehmen</button>
+      </span>
+    </div>
+    ${cards ? '' : '<p class="hint">Suche deutsche Drucke …</p>'}
+    ${P.error ? `<p class="note">${esc(P.error)}</p>` : ''}
+    ${cards && !cards.length ? '<p class="hint">Keine passenden deutschen Drucke gefunden.</p>' : ''}
+    ${cards?.length ? `<p class="hint">${P.found} deutsche Drucke gefunden${P.found > cards.length ? `, ${cards.length} angezeigt` : ''}.</p>` : ''}
+    <div class="alts">
+      ${(cards || [])
+        .map((c) => {
+          const n = P.picks.get(c.id)?.n || 0;
+          const thumb = faceImages(c)[0]?.normal;
+          return `<div class="alt land-alt${n ? ' current' : ''}" data-land-card="${esc(c.id)}">
+            <button class="land-thumb" data-land-plus="${esc(c.id)}" aria-label="Druck hinzufügen">
+              ${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" />` : ''}
+              <span class="count" ${n ? '' : 'hidden'} data-land-n="${esc(c.id)}">${n}×</span>
+            </button>
+            <span>${esc(c.set.toUpperCase())} #${esc(c.collector_number)} · ${esc((c.released_at || '').slice(0, 4))}</span>
+            ${c.image_status === 'lowres' ? '<span class="verdict bad">unscharfer Scan</span>' : ''}
+            <span class="land-step">
+              <button class="btn small" data-land-minus="${esc(c.id)}" aria-label="Einen weniger">−</button>
+              <button class="btn small" data-land-plus="${esc(c.id)}" aria-label="Einen mehr">+</button>
+            </span>
+          </div>`;
+        })
+        .join('')}
+    </div>
+    ${P.next ? '<p><button class="btn" data-land-more>Weitere Drucke laden</button></p>' : ''}`;
+}
+
+// Nur die betroffenen Zähler aktualisieren, damit die Bilder nicht neu laden
+function updateLandCounts(id) {
+  const P = landPicker;
+  const n = P.picks.get(id)?.n || 0;
+  const badge = dialog.querySelector(`[data-land-n="${id}"]`);
+  if (badge) {
+    badge.textContent = `${n}×`;
+    badge.hidden = !n;
+  }
+  dialog.querySelector(`[data-land-card="${id}"]`)?.classList.toggle('current', n > 0);
+  dialog.querySelector('[data-land-count]').textContent = landHeadHtml(P);
+}
+
+function applyLandPicks() {
+  const P = landPicker;
+  const group = landGroup(P.name);
+  // Die automatische Auswahl einmal sichern, damit „Automatisch“ sie wiederherstellen kann
+  state.landAuto[P.name] ||= group.filter((g) => !g.res.picked);
+  const auto = state.landAuto[P.name];
+  const base = auto[0]?.res.base || group[0].res.base;
+
+  const fresh = [];
+  for (const { card, n } of P.picks.values()) {
+    if (!n) continue;
+    fresh.push({
+      id: state.nextId++, name: P.name, count: n, set: card.set, number: card.collector_number,
+      isCommander: false, nameOverride: '',
+      res: { base, chosen: card, status: card.lang === 'de' ? STATUS.other : STATUS.english, picked: true, explicitPrint: true, checks: {} },
+    });
+  }
+  // Rest mit der automatischen Auswahl auffüllen
+  let rest = P.total - pickedCount(P);
+  for (const a of auto) {
+    if (rest <= 0) break;
+    const n = Math.min(a.count, rest);
+    fresh.push({ ...a, id: state.nextId++, count: n });
+    rest -= n;
+  }
+  fresh.forEach(refresh);
+  state.entries = state.entries.filter((e) => !group.includes(e)).concat(fresh);
+  render();
+}
+
+function resetLands() {
+  const P = landPicker;
+  const auto = state.landAuto[P.name];
+  if (auto) {
+    const group = landGroup(P.name);
+    state.entries = state.entries.filter((e) => !group.includes(e)).concat(auto);
+    delete state.landAuto[P.name];
+    render();
+  }
+  P.picks.clear();
+}
+
+dialog.addEventListener('click', (ev) => {
+  const P = landPicker;
+  if (!P || !dialog.open) return;
+  const t = ev.target;
+  const plus = t.closest('[data-land-plus]')?.dataset.landPlus;
+  const minus = t.closest('[data-land-minus]')?.dataset.landMinus;
+  if (plus) {
+    if (pickedCount(P) >= P.total) return;
+    const card = P.cards.find((c) => c.id === plus);
+    const p = P.picks.get(plus) || { card, n: 0 };
+    p.n++;
+    P.picks.set(plus, p);
+    updateLandCounts(plus);
+  } else if (minus) {
+    const p = P.picks.get(minus);
+    if (!p) return;
+    if (--p.n <= 0) P.picks.delete(minus);
+    updateLandCounts(minus);
+  } else if (t.closest('[data-land-apply]')) {
+    applyLandPicks();
+    dialog.close();
+  } else if (t.closest('[data-land-reset]')) {
+    resetLands();
+    dialog.close();
+  } else if (t.closest('[data-land-more]')) {
+    t.closest('[data-land-more]').disabled = true;
+    loadLandPrints(true);
+  }
+});
+dialog.addEventListener('change', (ev) => {
+  if (!landPicker || !ev.target.matches('[data-land-fullart]')) return;
+  landPicker.fullArt = ev.target.checked;
+  landPicker.cards = null;
+  renderLandPicker();
+  loadLandPrints();
+});
+dialog.addEventListener('close', () => {
+  // Das close-Ereignis kommt verzögert – wurde inzwischen neu geöffnet, Auswahl behalten
+  if (!dialog.open) landPicker = null;
+});
+
 // ---------- PDF ----------
 
 async function makePdf() {
