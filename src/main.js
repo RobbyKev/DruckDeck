@@ -12,6 +12,7 @@ import {
   faceImages, germanName, germanFaceNames, bestGermanText, isBasicLand, STATUS,
 } from './lib/scryfall.js';
 import { buildPdf, pdfFileName } from './lib/pdf.js';
+import { buildPrintShop, printShopFileName } from './lib/printshop.js';
 import { initBrowse } from './browse.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -344,6 +345,26 @@ $('#opt-gap').addEventListener('change', (ev) => {
   state.options.gap = Number(ev.target.value);
   try {
     localStorage.setItem('druckdeck.gap', ev.target.value);
+  } catch {}
+});
+
+// Ausgabeformat: A4 oder Druckerei (PDF je Karte / ZIP), im Browser gemerkt
+const FORMAT_BUTTON = { a4: 'PDF erstellen', 'shop-pdf': 'PDF erstellen', 'shop-zip': 'ZIP erstellen' };
+function setFormat(value) {
+  state.format = FORMAT_BUTTON[value] ? value : 'a4';
+  $('#opt-format').value = state.format;
+  $('#pdf-btn').textContent = FORMAT_BUTTON[state.format];
+  $('#gap-field').hidden = state.format !== 'a4'; // Druckerei-Dateien haben immer 3 mm Anschnitt
+}
+try {
+  setFormat(localStorage.getItem('druckdeck.format') || 'a4');
+} catch {
+  setFormat('a4');
+}
+$('#opt-format').addEventListener('change', (ev) => {
+  setFormat(ev.target.value);
+  try {
+    localStorage.setItem('druckdeck.format', state.format);
   } catch {}
 });
 
@@ -710,13 +731,19 @@ async function makePdf() {
   btn.disabled = true;
   try {
     const entries = sortedEntries();
-    const result = await buildPdf({
+    const shop = state.format !== 'a4';
+    const format = state.format === 'shop-zip' ? 'zip' : 'pdf';
+    const args = {
       deckName: state.deckName,
       entries,
       options: state.options,
-      onProgress: (done, total) => setProgress(done, total, `Bilder für PDF: ${done} von ${total} …`),
-    });
+      format,
+      onProgress: (done, total) =>
+        setProgress(done, total, `Bilder für ${format === 'zip' ? 'ZIP' : 'PDF'}: ${done} von ${total} …`),
+    };
+    const result = shop ? await buildPrintShop(args) : await buildPdf(args);
     $('#progress-panel').hidden = true;
+    result.fileName = shop ? printShopFileName(state.deckName, format) : pdfFileName(state.deckName);
     return result;
   } finally {
     btn.disabled = false;
@@ -725,18 +752,18 @@ async function makePdf() {
 
 $('#pdf-btn').addEventListener('click', async () => {
   try {
-    const { blob } = await makePdf();
+    const { blob, fileName } = await makePdf();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = pdfFileName(state.deckName);
+    a.download = fileName;
     document.body.append(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch (err) {
     $('#progress-panel').hidden = true;
-    alert(`PDF konnte nicht erstellt werden: ${err.message}`);
+    alert(`Datei konnte nicht erstellt werden: ${err.message}`);
   }
 });
 
