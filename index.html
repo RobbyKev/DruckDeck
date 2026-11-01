@@ -89,7 +89,14 @@
             <label class="check"><input type="checkbox" id="opt-lands" checked /> Standardländer mitdrucken</label>
             <label class="check"><input type="checkbox" id="opt-backs" checked /> Rückseiten doppelseitiger Karten mitdrucken</label>
             <label class="check"><input type="checkbox" id="opt-trans" checked /> Übersetzungen englischer Karten mitdrucken</label>
-            <label class="check">Abstand zum Schneiden
+            <label class="check">Format
+              <select id="opt-format">
+                <option value="a4">A4 zum Selbstdrucken (PDF)</option>
+                <option value="shop-pdf">Druckerei: PDF, eine Karte pro Seite</option>
+                <option value="shop-zip">Druckerei: Einzelbilder (ZIP)</option>
+              </select>
+            </label>
+            <label class="check" id="gap-field">Abstand zum Schneiden
               <select id="opt-gap">
                 <option value="0">kein Abstand</option>
                 <option value="1">1 mm</option>

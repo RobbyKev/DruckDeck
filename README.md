@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/33974458/README.md)
 # DruckDeck
 
 Magic-the-Gathering-Commander-Decks als **deutsche Proxys** auf A4 drucken. Reine statische Web-App (Vite, Vanilla JS), läuft komplett im Browser – ohne Anmeldung, Backend oder Tracking. Nur für den privaten Gebrauch.
@@ -10,6 +9,7 @@ Magic-the-Gathering-Commander-Decks als **deutsche Proxys** auf A4 drucken. Rein
 - **Deutsche Kartenbilder von Scryfall** mit Prüfung, ob das Bild wirklich deutsch ist (siehe unten), Ersatzdrucke und Markierung „nur Englisch verfügbar“.
 - **Vorschau** mit Badges, Zusammenfassung, editierbaren Namen und Austausch-Dialog (Klick auf eine Karte).
 - **PDF**: A4 hochkant, 3×3 Karten à 63 × 88 mm, Schnittmarken, Checkliste auf Seite 1, Standardländer auf eigenen Seiten am Ende, Rückseiten doppelseitiger Karten direkt hinter der Vorderseite.
+- **Druckerei-Export**: wahlweise ein PDF mit einer Karte pro Seite oder ein ZIP mit Einzelbildern. Jede Karte 822 × 1122 Pixel bei 300 dpi (Pokergröße 63,5 × 88,9 mm plus 3 mm gespiegelter Anschnitt), wie bei MakePlayingCards. Rückseiten doppelseitiger Karten und Übersetzungen als eigene Bilder.
 - **Cache** in IndexedDB (API-Antworten 7 Tage, Bilder dauerhaft) – ein zweiter Durchlauf ist sofort fertig. „Cache leeren“ im Fußbereich.
 
 ## Erkennung „wirklich deutsch“
